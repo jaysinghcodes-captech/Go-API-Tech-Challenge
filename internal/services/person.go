@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"go-api-tech-challenge/internal/models"
+	"github.com/lib/pq"
 )
 
 type PersonService struct {

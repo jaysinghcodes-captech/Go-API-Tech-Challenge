@@ -10,6 +10,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"go-api-tech-challenge/internal/config"
+	"go-api-tech-challenge/internal/database"
+	"go-api-tech-challenge/internal/routes"
+	"go-api-tech-challenge/internal/services"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
