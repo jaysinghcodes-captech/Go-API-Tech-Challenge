@@ -10,15 +10,14 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"go-api-tech-challenge/internal/config"
-	"go-api-tech-challenge/internal/database"
-	"go-api-tech-challenge/internal/routes"
-	"go-api-tech-challenge/internal/services"
-
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/config"
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/database"
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/routes"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v2"
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/services" // Correct path here (services not service)
 )
 
 func main() {
@@ -42,7 +41,7 @@ func run(ctx context.Context) error {
 		ResponseHeaders: false,
 	})
 
-
+	// Set up DB connection
 	db, err := database.New(
 		ctx,
 		fmt.Sprintf(
@@ -59,39 +58,41 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("[in run]: %w", err)
 	}
-  
+
 	defer func() {
 		if err = db.Close(); err != nil {
-			logger.Error("Error closing db connection", "err", err)
+			logger.Error("Error closing DB connection", "err", err)
 		}
 	}()
 
+	// Router setup
 	r := chi.NewRouter()
 	r.Use(httplog.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:	[]string{"*"},
-		AllowedMethods:	[]string{"GET". "POST", "PUT", "DELETE"},
-		MaxAge: 300,
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		MaxAge:         300,
 	}))
 
+	// Instantiate service
+	svsCourse := services.NewCourseService(db)
+	svsPerson := services.NewPersonService(db)
 
-	svs := service.NewService(db)
-	routes.RegisterRoutes(router, logger, svs, routes.WithRegisterHealthRoute(true))
+	// Register routes
+	routes.RegisterRoutes(r, logger, svsCourse, svsPerson)
 
-	if cfg.HTTPUseSwagger {
-		swagger.RunSwaggerUI(r, logger, cfg.HTTPDomain+cfg.HTTPPort)
-	}
-
+	// HTTP Server setup
 	srv := &http.Server{
-		Addr:    cfg.HTTPDomain + cfg.HTTPPort,
-		IdleTimeout: time.Minute,
+		Addr:              cfg.HTTPDomain + cfg.HTTPPort,
+		IdleTimeout:       time.Minute,
 		ReadHeaderTimeout: 500 * time.Millisecond,
-		ReadTimeout: 500 * time.Millisecond,
-		WriteTimeout: 500 * time.Millisecond,
-		Handler: r,
+		ReadTimeout:       500 * time.Millisecond,
+		WriteTimeout:      500 * time.Millisecond,
+		Handler:           r,
 	}
 
+	// Graceful shutdown setup
 	serverCtx, serverStopCtx := context.WithCancel(context.Background())
 
 	sig := make(chan os.Signal, 1)
@@ -102,12 +103,8 @@ func run(ctx context.Context) error {
 		fmt.Println()
 		logger.Info("Shutdown signal received. Shutting down server...")
 
-		shutdownCtx, err := context.WithTimeout(
-			serverCtx, time.Duration(cfg.HTTPShutdownTimeout)*time.Second,
-		)
-		if err != nil {
-			log.Fatalf("Error creating context.WithTimeout. err: %v", err)
-		}
+		shutdownCtx, cancel := context.WithTimeout(serverCtx, time.Duration(cfg.HTTPShutdownDuration)*time.Second)
+		defer cancel()
 
 		go func() {
 			<-shutdownCtx.Done()
@@ -122,14 +119,13 @@ func run(ctx context.Context) error {
 		serverStopCtx()
 	}()
 
-	logger.Info(fmt.Sprintf("Server started at %s", serverInstance.Addr))
+	logger.Info("Server started at %s", srv.Addr)
 	err = srv.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err 
+		return err
 	}
 
 	<-serverCtx.Done()
 	logger.Info("Shutdown complete. Exiting...")
 	return nil
 }
-

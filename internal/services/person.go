@@ -1,11 +1,10 @@
-package person
+package services
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"go-api-tech-challenge/internal/models"
-	"github.com/lib/pq"
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/models"
 )
 
 type PersonService struct {
@@ -19,24 +18,32 @@ func NewPersonService(db *sql.DB) *PersonService {
 }
 
 func (p *PersonService) ListPersons(ctx context.Context) ([]models.Person, error) {
-	rows, err := p.DB.Query("SELECT * FROM person ORDER BY id")
+	rows, err := p.DB.Query("SELECT id, first_name, last_name, type, age FROM person ORDER BY id")
 	if err != nil {
-		return []models.Person{}, fmt.Errorf("[in services.ListPersons] failed to get persons: %w", err)
+		return nil, fmt.Errorf("[in services.ListPersons] failed to get persons: %w", err)
 	}
 	defer rows.Close()
 
 	var persons []models.Person
 	for rows.Next() {
 		var person models.Person
-		err := rows.Scan(&person.ID, &person.FirstName, &person.LastName, &person.Type, &person.Age, pq.Array(&person.Courses))
+		err := rows.Scan(&person.ID, &person.FirstName, &person.LastName, &person.Type, &person.Age)
 		if err != nil {
-			return []models.Person{}, fmt.Errorf("[in services.ListPersons] failed to scan person from row: %w", err)
+			return nil, fmt.Errorf("[in services.ListPersons] failed to scan person from row: %w", err)
 		}
+
+		// Fetch courses for the current person
+		courseIDs, err := p.getCoursesForPerson(person.ID)
+		if err != nil {
+			return nil, err
+		}
+		person.Courses = courseIDs
+
 		persons = append(persons, person)
 	}
 
 	if err = rows.Err(); err != nil {
-		return []models.Person{}, fmt.Errorf("[in services.ListPersons] failed to scan persons: %w", err)
+		return nil, fmt.Errorf("[in services.ListPersons] failed to scan persons: %w", err)
 	}
 
 	return persons, nil
@@ -44,13 +51,20 @@ func (p *PersonService) ListPersons(ctx context.Context) ([]models.Person, error
 
 func (p *PersonService) GetPersonByFirstName(ctx context.Context, firstName string) (models.Person, error) {
 	var person models.Person
-	err := p.DB.QueryRow("SELECT * FROM person WHERE first_name = $1", firstName).Scan(&person.ID, &person.FirstName, &person.LastName, &person.Type, &person.Age, pq.Array(&person.Courses))
+	err := p.DB.QueryRow("SELECT id, first_name, last_name, type, age FROM person WHERE first_name = $1", firstName).Scan(&person.ID, &person.FirstName, &person.LastName, &person.Type, &person.Age)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return models.Person{}, fmt.Errorf("[in services.GetPersonByFirstName] person with first name %s not found: %w", firstName, err)
 		}
 		return models.Person{}, fmt.Errorf("[in services.GetPersonByFirstName] failed to get person with first name %s: %w", firstName, err)
 	}
+
+	// Fetch courses for the person
+	courseIDs, err := p.getCoursesForPerson(person.ID)
+	if err != nil {
+		return models.Person{}, err
+	}
+	person.Courses = courseIDs
 
 	return person, nil
 }
@@ -157,6 +171,7 @@ func (p *PersonService) DeletePerson(ctx context.Context, firstName string) erro
 		return fmt.Errorf("[in services.DeletePerson] person with first name %s not found", firstName)
 	}
 
+	// Clear associated courses
 	_, err = tx.ExecContext(ctx, "DELETE FROM person_course WHERE person_id = (SELECT id FROM person WHERE first_name = $1)", firstName)
 	if err != nil {
 		tx.Rollback()
@@ -169,4 +184,28 @@ func (p *PersonService) DeletePerson(ctx context.Context, firstName string) erro
 	}
 
 	return nil
+}
+
+// Helper method to retrieve courses for a person
+func (p *PersonService) getCoursesForPerson(personID int) ([]int, error) {
+	rows, err := p.DB.Query("SELECT course_id FROM person_course WHERE person_id = $1", personID)
+	if err != nil {
+		return nil, fmt.Errorf("[in services.getCoursesForPerson] failed to get courses: %w", err)
+	}
+	defer rows.Close()
+
+	var courseIDs []int
+	for rows.Next() {
+		var courseID int
+		if err := rows.Scan(&courseID); err != nil {
+			return nil, fmt.Errorf("[in services.getCoursesForPerson] failed to scan course ID: %w", err)
+		}
+		courseIDs = append(courseIDs, courseID)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("[in services.getCoursesForPerson] failed to scan course IDs: %w", err)
+	}
+
+	return courseIDs, nil
 }

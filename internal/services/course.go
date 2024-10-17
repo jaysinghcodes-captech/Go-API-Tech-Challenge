@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"context"
 	"fmt"
-	"go-api-tech-challenge/internal/models"
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/models"
 )
 
 type CourseService struct {
@@ -18,7 +18,7 @@ func NewCourseService(db *sql.DB) *CourseService {
 }
 
 func (c *CourseService) ListCourses(ctx context.Context) ([]models.Course, error) {
-	rows, err := c.DB.Query("SELECT * FROM courses ORDER BY id")
+	rows, err := c.DB.Query("SELECT * FROM course ORDER BY id")
 	if err != nil {
 		return []models.Course{}, fmt.Errorf("[in services.ListCourses] failed to get courses: %w", err)
 	}
@@ -43,7 +43,7 @@ func (c *CourseService) ListCourses(ctx context.Context) ([]models.Course, error
 
 func (c *CourseService) GetCourseById(ctx context.Context, id int) (models.Course, error) {
 	var course models.Course
-	err := c.DB.QueryRow("SELECT * FROM courses WHERE id = $1", id).Scan(&course.ID, &course.Name)
+	err := c.DB.QueryRow("SELECT * FROM course WHERE id = $1", id).Scan(&course.ID, &course.Name)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return models.Course{}, fmt.Errorf("[in services.GetCourseById] course with id %d not found: %w", id, err)
@@ -56,7 +56,7 @@ func (c *CourseService) GetCourseById(ctx context.Context, id int) (models.Cours
 
 func (c *CourseService) CreateCourse(ctx context.Context, courseName string) (models.Course, error) {
 	var newID int
-	err := c.DB.QueryRow("INSERT INTO courses (name) VALUES ($1) RETURNING id", courseName).Scan(&newID)
+	err := c.DB.QueryRow("INSERT INTO course (name) VALUES ($1) RETURNING id", courseName).Scan(&newID)
 	if err != nil {
 		return models.Course{}, fmt.Errorf("[in services.CreateCourse] failed to create course: %w", err)
 	}
@@ -65,7 +65,7 @@ func (c *CourseService) CreateCourse(ctx context.Context, courseName string) (mo
 }
 
 func (c *CourseService) UpdateCourse(ctx context.Context, courseID int, newCourseName string) (models.Course, error) {
-	result, err := c.DB.Exec("UPDATE courses SET name = $1 WHERE id = $2", newCourseName, courseID)
+	result, err := c.DB.Exec("UPDATE course SET name = $1 WHERE id = $2", newCourseName, courseID)
 	if err != nil {
 		return models.Course{}, fmt.Errorf("[in services.UpdateCourse] failed to update course with id %d: %w", courseID, err)
 	}
@@ -83,7 +83,7 @@ func (c *CourseService) UpdateCourse(ctx context.Context, courseID int, newCours
 }
 
 func (c *CourseService) DeleteCourse(ctx context.Context, id int) error {
-	result, err := c.DB.Exec("DELETE FROM courses WHERE id = $1", id)
+	result, err := c.DB.Exec("DELETE FROM course WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("[in services.DeleteCourse] failed to delete course with id %d: %w", id, err)
 	}

@@ -3,8 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"go-api-tech-challenge/internal/models"
-	"github.com/go-chi/httplog"
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/models"
+	"github.com/go-chi/httplog/v2"
 )
 
 type outputCourse struct {

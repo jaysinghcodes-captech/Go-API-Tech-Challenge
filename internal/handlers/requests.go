@@ -1,12 +1,11 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
+	"encoding/json"
 	"net/http"
-
-	"go-api-tech-challenge/internal/models"
-}
+	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/models"
+)
 
 type inputCourse struct {
 	Name        string `json:"name"`

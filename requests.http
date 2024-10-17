@@ -2,7 +2,7 @@
 # api/course
 ###
 
-GET http://localhost:8000/api/course
+GET http://localhost:8000/api/course/
 
 ###
 
@@ -34,7 +34,7 @@ DELETE http://localhost:8000/api/course/{id}
 # api/person
 ###
 
-GET    http://localhost:8000/api/person
+GET    http://localhost:8000/api/person/
 
 ###
 
@@ -47,7 +47,7 @@ content-type: application/json
 
 {
   "first_name": "first_name",
-  "last_name": "last_name",
+  "last_name": "last_name"
   "type": "student",
   "age": 0,
   "courses": [
