@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	"github.com/jaysinghcodes-captech/Go-API-Tech-Challenge/internal/models"
 )
 
@@ -80,28 +81,39 @@ func (p *PersonService) UpdatePerson(ctx context.Context, firstName string, upda
 		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to begin transaction: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, "UPDATE person SET first_name = $1, last_name = $2, type = $3, age = $4 WHERE first_name = $5", updatedPerson.FirstName, updatedPerson.LastName, updatedPerson.Type, updatedPerson.Age, firstName)
+	// Fetch the person_id using the old firstName
+	var personID int
+	err = tx.QueryRowContext(ctx, "SELECT id FROM person WHERE first_name = $1", firstName).Scan(&personID)
 	if err != nil {
 		tx.Rollback()
-		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to update person with first name %s: %w", firstName, err)
+		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to fetch person with first name %s: %w", firstName, err)
+	}
+
+	// Update the person details
+	_, err = tx.ExecContext(ctx, "UPDATE person SET first_name = $1, last_name = $2, type = $3, age = $4 WHERE id = $5",
+		updatedPerson.FirstName, updatedPerson.LastName, updatedPerson.Type, updatedPerson.Age, personID)
+	if err != nil {
+		tx.Rollback()
+		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to update person with id %d: %w", personID, err)
 	}
 
 	// Clear existing courses
-	_, err = tx.ExecContext(ctx, "DELETE FROM person_course WHERE person_id = (SELECT id FROM person WHERE first_name = $1)", firstName)
+	_, err = tx.ExecContext(ctx, "DELETE FROM person_course WHERE person_id = $1", personID)
 	if err != nil {
 		tx.Rollback()
-		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to clear existing courses for person with first name %s: %w", firstName, err)
+		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to clear existing courses for person with id %d: %w", personID, err)
 	}
 
 	// Associate new courses
 	for _, courseID := range updatedPerson.Courses {
-		_, err = tx.ExecContext(ctx, "INSERT INTO person_course (person_id, course_id) VALUES ((SELECT id FROM person WHERE first_name = $1), $2)", updatedPerson.FirstName, courseID)
+		_, err = tx.ExecContext(ctx, "INSERT INTO person_course (person_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", personID, courseID)
 		if err != nil {
 			tx.Rollback()
-			return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to associate new courses with person: %w", err)
+			return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to associate new courses with person id %d: %w", personID, err)
 		}
 	}
 
+	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
 		return models.Person{}, fmt.Errorf("[in services.UpdatePerson] failed to commit transaction: %w", err)
@@ -154,10 +166,26 @@ func (p *PersonService) DeletePerson(ctx context.Context, firstName string) erro
 		return fmt.Errorf("[in services.DeletePerson] failed to begin transaction: %w", err)
 	}
 
-	result, err := tx.ExecContext(ctx, "DELETE FROM person WHERE first_name = $1", firstName)
+	// Fetch the person_id using the firstName
+	var personID int
+	err = tx.QueryRowContext(ctx, "SELECT id FROM person WHERE first_name = $1", firstName).Scan(&personID)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("[in services.DeletePerson] failed to delete person with first name %s: %w", firstName, err)
+		return fmt.Errorf("[in services.DeletePerson] failed to fetch person with first name %s: %w", firstName, err)
+	}
+
+	// Clear associated courses first
+	_, err = tx.ExecContext(ctx, "DELETE FROM person_course WHERE person_id = $1", personID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("[in services.DeletePerson] failed to clear associated courses for person with id %d: %w", personID, err)
+	}
+
+	// Then delete the person
+	result, err := tx.ExecContext(ctx, "DELETE FROM person WHERE id = $1", personID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("[in services.DeletePerson] failed to delete person with id %d: %w", personID, err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -168,16 +196,10 @@ func (p *PersonService) DeletePerson(ctx context.Context, firstName string) erro
 
 	if rowsAffected == 0 {
 		tx.Rollback()
-		return fmt.Errorf("[in services.DeletePerson] person with first name %s not found", firstName)
+		return fmt.Errorf("[in services.DeletePerson] person with id %d not found", personID)
 	}
 
-	// Clear associated courses
-	_, err = tx.ExecContext(ctx, "DELETE FROM person_course WHERE person_id = (SELECT id FROM person WHERE first_name = $1)", firstName)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("[in services.DeletePerson] failed to clear associated courses for person with first name %s: %w", firstName, err)
-	}
-
+	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("[in services.DeletePerson] failed to commit transaction: %w", err)
